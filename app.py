@@ -54,7 +54,8 @@ def add_to_cart(product):
         st.session_state.cart[name]['quantity'] += 1
     else:
         st.session_state.cart[name] = {"name": product['name'], "price": product['price'], "quantity": 1}
-    st.toast(f"'{name}' ditambahkan ke keranjang!", icon="�")
+    # PERBAIKAN: Menggunakan emoji yang valid
+    st.toast(f"'{name}' ditambahkan ke keranjang!", icon="🛒")
 
 def remove_from_cart(product_name):
     """Menghapus satu kuantitas produk."""
