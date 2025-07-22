@@ -11,8 +11,7 @@ st.set_page_config(
 )
 
 # --- KONFIGURASI MIDTRANS ---
-# Inisialisasi klien Midtrans menggunakan st.secrets untuk keamanan
-# Anda perlu menambahkan Server Key Anda di file secrets.toml
+# Server Key ada di file secrets.toml streamlit
 snap = midtransclient.Snap(
     is_production=False, # Ganti menjadi True jika sudah di production
     server_key=st.secrets.get("MIDTRANS_SERVER_KEY", os.environ.get("MIDTRANS_SERVER_KEY")),
@@ -115,24 +114,24 @@ for i, product in enumerate(products):
             st.write(product["description"])
             formatted_price = f"Rp{product['price']:,}".replace(',', '.')
             st.markdown(f"<h4>Harga: <font color='#22c55e'>{formatted_price}</font></h4>", unsafe_allow_html=True)
-            st.button("Tambahkan ke Keranjang", key=f"btn_{i}", on_click=add_to_cart, args=(product,))
+            st.button("Tambah ke Keranjang", key=f"btn_{i}", on_click=add_to_cart, args=(product,))
         st.write("")
 
 # --- SIDEBAR (KERANJANG BELANJA) ---
 with st.sidebar:
-    st.title("🛒 Keranjang Belanja")
+    st.title("🛒 Keranjang")
     st.write("---")
 
     total_price = 0
     item_details = []
     if not st.session_state.cart:
-        st.info("Keranjang belanja Anda masih kosong.")
+        st.info("Keranjang masih kosong.")
     else:
         for product_name, details in st.session_state.cart.items():
             subtotal = details['price'] * details['quantity']
             total_price += subtotal
             item_details.append({
-                "id": product_name.replace(" ", "_"), # ID produk untuk Midtrans
+                "id": product_name.replace(" ", "_"), # ID produk buat Midtrans
                 "price": details['price'],
                 "quantity": details['quantity'],
                 "name": details['name']
@@ -168,7 +167,7 @@ with st.sidebar:
     if is_cart_empty:
         st.warning("Keranjang Anda kosong.")
     elif is_form_incomplete:
-        st.warning("Harap lengkapi semua detail pelanggan.")
+        st.warning("Lengkapi semua detail pelanggan.")
 
     if st.button("Checkout Sekarang", disabled=(is_cart_empty or is_form_incomplete)):
         # Membuat transaksi ke Midtrans
@@ -194,7 +193,7 @@ with st.sidebar:
             st.error(f"Gagal membuat transaksi Midtrans: {e}")
             st.session_state.payment_token = None
 
-# --- MENAMPILKAN POP-UP SNAP MIDTRANS ---
+# --- SNAP MIDTRANS ---
 if st.session_state.get('payment_token'):
     snap_popup_html = f"""
         <html>
@@ -230,14 +229,14 @@ if st.session_state.get('payment_token'):
         </html>
     """
     st.components.v1.html(snap_popup_html, height=600)
-    # Reset token setelah ditampilkan untuk menghindari pop-up muncul terus
+    # Reset token
     st.session_state.payment_token = None
     # Kosongkan keranjang setelah checkout
     st.session_state.cart = {}
     st.session_state.customer_name = ""
     st.session_state.customer_email = ""
     st.session_state.customer_phone = ""
-    st.success("Silakan selesaikan pembayaran Anda.")
+    st.success("Selesaikan pembayaran Anda.")
     # Kita tidak rerun di sini agar pop-up tidak langsung hilang
 
 # --- FOOTER ---
