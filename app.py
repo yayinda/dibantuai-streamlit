@@ -2,6 +2,7 @@ import streamlit as st
 import midtransclient
 import time
 import os
+import re # Modul untuk validasi format email (regex)
 
 # Mengatur konfigurasi halaman Streamlit
 st.set_page_config(
@@ -12,10 +13,10 @@ st.set_page_config(
 
 # --- KONFIGURASI MIDTRANS ---
 # Inisialisasi klien Midtrans menggunakan st.secrets untuk keamanan
-# Anda perlu menambahkan Server Key Anda di file secrets.toml
 snap = midtransclient.Snap(
     is_production=False, # Ganti menjadi True jika sudah di production
     server_key=st.secrets.get("MIDTRANS_SERVER_KEY", os.environ.get("MIDTRANS_SERVER_KEY")),
+    client_key=st.secrets.get("MIDTRANS_CLIENT_KEY", os.environ.get("MIDTRANS_CLIENT_KEY"))
 )
 
 # --- INISIALISASI SESSION STATE ---
@@ -30,23 +31,26 @@ if 'customer_phone' not in st.session_state:
 if 'payment_token' not in st.session_state:
     st.session_state.payment_token = None
 
+# --- FUNGSI-FUNGSI BANTUAN ---
+def clear_cart_and_customer_info():
+    """Mengosongkan keranjang dan data pelanggan."""
+    st.session_state.cart = {}
+    st.session_state.customer_name = ""
+    st.session_state.customer_email = ""
+    st.session_state.customer_phone = ""
+    st.session_state.payment_token = None
 
-# --- FUNGSI-FUNGSI UNTUK KERANJANG ---
 def add_to_cart(product):
-    """Menambahkan produk ke keranjang atau menambah kuantitasnya."""
+    """Menambahkan produk ke keranjang."""
     name = product['name']
     if name in st.session_state.cart:
         st.session_state.cart[name]['quantity'] += 1
     else:
-        st.session_state.cart[name] = {
-            "name": product['name'],
-            "price": product['price'],
-            "quantity": 1
-        }
+        st.session_state.cart[name] = {"name": product['name'], "price": product['price'], "quantity": 1}
     st.toast(f"'{name}' ditambahkan ke keranjang!", icon="🛒")
 
 def remove_from_cart(product_name):
-    """Menghapus satu kuantitas produk dari keranjang."""
+    """Menghapus satu kuantitas produk."""
     if product_name in st.session_state.cart:
         st.session_state.cart[product_name]['quantity'] -= 1
         if st.session_state.cart[product_name]['quantity'] == 0:
@@ -54,10 +58,25 @@ def remove_from_cart(product_name):
         st.rerun()
 
 def increase_quantity(product_name):
-    """Menambah satu kuantitas produk di keranjang."""
+    """Menambah satu kuantitas produk."""
     if product_name in st.session_state.cart:
         st.session_state.cart[product_name]['quantity'] += 1
         st.rerun()
+
+# --- PENANGANAN STATUS PEMBAYARAN (DARI URL) ---
+# Cek apakah ada parameter 'payment_status' di URL
+payment_status = st.query_params.get("payment_status")
+if payment_status:
+    if payment_status == "success":
+        st.success("Pembayaran berhasil! Terima kasih telah berbelanja.")
+        st.balloons()
+        clear_cart_and_customer_info()
+    elif payment_status == "closed":
+        st.warning("Anda menutup jendela pembayaran sebelum transaksi selesai.")
+    
+    # Hapus query parameter dari URL agar pesan tidak muncul terus
+    st.query_params.clear()
+
 
 # --- DATA PRODUK ---
 products = [
@@ -132,114 +151,92 @@ with st.sidebar:
             subtotal = details['price'] * details['quantity']
             total_price += subtotal
             item_details.append({
-                "id": product_name.replace(" ", "_"), # ID produk untuk Midtrans
-                "price": details['price'],
-                "quantity": details['quantity'],
-                "name": details['name']
+                "id": product_name.replace(" ", "_"), "price": details['price'],
+                "quantity": details['quantity'], "name": details['name']
             })
-            
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.subheader(details['name'])
-                formatted_subtotal = f"Rp{subtotal:,}".replace(',', '.')
                 st.write(f"Jumlah: {details['quantity']} x Rp{details['price']:,}".replace(',', '.'))
-                st.write(f"**Subtotal: {formatted_subtotal}**")
-
             with col2:
                 st.button("➕", key=f"add_{product_name}", on_click=increase_quantity, args=(product_name,))
                 st.button("➖", key=f"rem_{product_name}", on_click=remove_from_cart, args=(product_name,))
             st.write("---")
 
     st.subheader("Total Belanja")
-    formatted_total = f"Rp{total_price:,}".replace(',', '.')
-    st.markdown(f"<h2><font color='#22c55e'>{formatted_total}</font></h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2><font color='#22c55e'>Rp{total_price:,}".replace(',', '.')+"</font></h2>", unsafe_allow_html=True)
     st.write("---")
 
-    # --- DETAIL PELANGGAN ---
     st.subheader("Detail Pelanggan")
     st.session_state.customer_name = st.text_input("Nama Lengkap", st.session_state.customer_name)
     st.session_state.customer_email = st.text_input("Alamat Email", st.session_state.customer_email)
     st.session_state.customer_phone = st.text_input("Nomor Telepon", st.session_state.customer_phone)
 
-    # --- LOGIKA TOMBOL CHECKOUT ---
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    is_email_valid = re.match(email_regex, st.session_state.customer_email) is not None if st.session_state.customer_email else False
     is_cart_empty = not st.session_state.cart
     is_form_incomplete = not (st.session_state.customer_name and st.session_state.customer_email and st.session_state.customer_phone)
     
-    if is_cart_empty:
-        st.warning("Keranjang Anda kosong.")
-    elif is_form_incomplete:
-        st.warning("Harap lengkapi semua detail pelanggan.")
+    if is_cart_empty: st.warning("Keranjang Anda kosong.")
+    elif is_form_incomplete: st.warning("Harap lengkapi semua detail pelanggan.")
+    elif not is_email_valid: st.error("Format alamat email tidak valid.")
 
-    if st.button("Checkout Sekarang", disabled=(is_cart_empty or is_form_incomplete)):
-        # Membuat transaksi ke Midtrans
+    if st.button("Checkout Sekarang", disabled=(is_cart_empty or is_form_incomplete or not is_email_valid)):
         order_id = f"order-dibantuai-{int(time.time())}"
-        transaction_details = {
-            "order_id": order_id,
-            "gross_amount": total_price
-        }
-        customer_details = {
-            "first_name": st.session_state.customer_name,
-            "email": st.session_state.customer_email,
-            "phone": st.session_state.customer_phone
-        }
-        
+        transaction_details = {"order_id": order_id, "gross_amount": total_price}
+        customer_details = {"first_name": st.session_state.customer_name, "email": st.session_state.customer_email, "phone": st.session_state.customer_phone}
         try:
-            transaction = snap.create_transaction({
-                "transaction_details": transaction_details,
-                "item_details": item_details,
-                "customer_details": customer_details
-            })
+            with st.spinner("Membuat transaksi..."):
+                transaction = snap.create_transaction({"transaction_details": transaction_details, "item_details": item_details, "customer_details": customer_details})
             st.session_state.payment_token = transaction['token']
         except Exception as e:
             st.error(f"Gagal membuat transaksi Midtrans: {e}")
             st.session_state.payment_token = None
 
-# --- MENAMPILKAN POP-UP SNAP MIDTRANS ---
+# --- MENAMPILKAN POP-UP SNAP MIDTRANS (DALAM DIALOG) ---
 if st.session_state.get('payment_token'):
-    snap_popup_html = f"""
-        <html>
-            <head>
-                <script type="text/javascript"
-                        src="https://app.sandbox.midtrans.com/snap/snap.js"
-                        data-client-key="{st.secrets.get('MIDTRANS_CLIENT_KEY', os.environ.get('MIDTRANS_CLIENT_KEY'))}"></script>
-            </head>
-            <body>
-                <script type="text/javascript">
-                    snap.pay('{st.session_state.payment_token}', {{
-                        onSuccess: function(result){{
-                            /* You may add your own implementation here */
-                            alert("payment success!"); console.log(result);
-                            window.parent.postMessage('payment-success', '*');
-                        }},
-                        onPending: function(result){{
-                            /* You may add your own implementation here */
-                            alert("wating your payment!"); console.log(result);
-                        }},
-                        onError: function(result){{
-                            /* You may add your own implementation here */
-                            alert("payment failed!"); console.log(result);
-                        }},
-                        onClose: function(){{
-                            /* You may add your own implementation here */
-                            console.log('customer closed the popup without finishing the payment');
-                            window.parent.postMessage('payment-close', '*');
-                        }}
-                    }})
-                </script>
-            </body>
-        </html>
-    """
-    st.components.v1.html(snap_popup_html, height=600)
-    # Reset token setelah ditampilkan untuk menghindari pop-up muncul terus
-    st.session_state.payment_token = None
-    # Kosongkan keranjang setelah checkout
-    st.session_state.cart = {}
-    st.session_state.customer_name = ""
-    st.session_state.customer_email = ""
-    st.session_state.customer_phone = ""
-    st.success("Silakan selesaikan pembayaran Anda.")
-    # Kita tidak rerun di sini agar pop-up tidak langsung hilang
-
+    with st.dialog("Selesaikan Pembayaran", width="large"):
+        # URL dasar dari halaman saat ini
+        # st.page_link tidak tersedia, jadi kita buat manual
+        # Ini adalah trik untuk mendapatkan URL dasar aplikasi Streamlit
+        # Namun, cara paling andal adalah dengan hardcode jika perlu.
+        # Untuk Streamlit Community Cloud, URL-nya akan tetap.
+        # Kita akan menggunakan JS untuk mendapatkan path saat ini.
+        
+        snap_popup_html = f"""
+            <html>
+                <head>
+                    <script type="text/javascript"
+                            src="https://app.sandbox.midtrans.com/snap/snap.js"
+                            data-client-key="{snap.client_key}"></script>
+                </head>
+                <body>
+                    <script type="text/javascript">
+                        snap.pay('{st.session_state.payment_token}', {{
+                            onSuccess: function(result){{
+                                console.log("payment success!"); console.log(result);
+                                // Arahkan kembali ke halaman utama dengan status sukses
+                                window.parent.location.href = window.parent.location.pathname + "?payment_status=success";
+                            }},
+                            onPending: function(result){{
+                                console.log("wating your payment!"); console.log(result);
+                            }},
+                            onError: function(result){{
+                                console.log("payment failed!"); console.log(result);
+                            }},
+                            onClose: function(){{
+                                console.log('customer closed the popup without finishing the payment');
+                                // Arahkan kembali ke halaman utama dengan status ditutup
+                                window.parent.location.href = window.parent.location.pathname + "?payment_status=closed";
+                            }}
+                        }})
+                    </script>
+                </body>
+            </html>
+        """
+        st.components.v1.html(snap_popup_html, height=600, scrolling=False)
+        # Token tidak di-reset di sini, di-reset setelah pembayaran berhasil/ditutup
+        
 # --- FOOTER ---
 st.write("---")
 st.write("© 2025 dibantu.ai | Untuk informasi lebih lanjut, hubungi kami di mana ya.")
