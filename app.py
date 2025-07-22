@@ -1,4 +1,7 @@
 import streamlit as st
+import midtransclient
+import time
+import os
 
 # Mengatur konfigurasi halaman Streamlit
 st.set_page_config(
@@ -7,18 +10,25 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- KONFIGURASI MIDTRANS ---
+# Inisialisasi klien Midtrans menggunakan st.secrets untuk keamanan
+# Anda perlu menambahkan Server Key Anda di file secrets.toml
+snap = midtransclient.Snap(
+    is_production=False, # Ganti menjadi True jika sudah di production
+    server_key=st.secrets.get("MIDTRANS_SERVER_KEY", os.environ.get("MIDTRANS_SERVER_KEY")),
+)
+
 # --- INISIALISASI SESSION STATE ---
-# Digunakan untuk menyimpan data agar tidak hilang saat aplikasi di-rerun
-# Keranjang belanja
 if 'cart' not in st.session_state:
     st.session_state.cart = {}
-# Detail pelanggan
 if 'customer_name' not in st.session_state:
     st.session_state.customer_name = ""
 if 'customer_email' not in st.session_state:
     st.session_state.customer_email = ""
 if 'customer_phone' not in st.session_state:
     st.session_state.customer_phone = ""
+if 'payment_token' not in st.session_state:
+    st.session_state.payment_token = None
 
 
 # --- FUNGSI-FUNGSI UNTUK KERANJANG ---
@@ -114,12 +124,19 @@ with st.sidebar:
     st.write("---")
 
     total_price = 0
+    item_details = []
     if not st.session_state.cart:
         st.info("Keranjang belanja Anda masih kosong.")
     else:
         for product_name, details in st.session_state.cart.items():
             subtotal = details['price'] * details['quantity']
             total_price += subtotal
+            item_details.append({
+                "id": product_name.replace(" ", "_"), # ID produk untuk Midtrans
+                "price": details['price'],
+                "quantity": details['quantity'],
+                "name": details['name']
+            })
             
             col1, col2 = st.columns([3, 1])
             with col1:
@@ -138,10 +155,8 @@ with st.sidebar:
     st.markdown(f"<h2><font color='#22c55e'>{formatted_total}</font></h2>", unsafe_allow_html=True)
     st.write("---")
 
-    # --- DETAIL PELANGGAN (TANPA FORM) ---
+    # --- DETAIL PELANGGAN ---
     st.subheader("Detail Pelanggan")
-    
-    # Menggunakan session_state untuk menyimpan nilai input secara real-time
     st.session_state.customer_name = st.text_input("Nama Lengkap", st.session_state.customer_name)
     st.session_state.customer_email = st.text_input("Alamat Email", st.session_state.customer_email)
     st.session_state.customer_phone = st.text_input("Nomor Telepon", st.session_state.customer_phone)
@@ -150,25 +165,80 @@ with st.sidebar:
     is_cart_empty = not st.session_state.cart
     is_form_incomplete = not (st.session_state.customer_name and st.session_state.customer_email and st.session_state.customer_phone)
     
-    # Hanya tampilkan pesan peringatan jika relevan
     if is_cart_empty:
-        st.warning("Keranjang Anda kosong. Silakan tambahkan produk.")
+        st.warning("Keranjang Anda kosong.")
     elif is_form_incomplete:
-        st.warning("Harap lengkapi semua detail pelanggan untuk checkout.")
+        st.warning("Harap lengkapi semua detail pelanggan.")
 
-    # Tombol checkout sekarang menggunakan st.button biasa
     if st.button("Checkout Sekarang", disabled=(is_cart_empty or is_form_incomplete)):
-        # Logika setelah checkout berhasil
-        st.success(f"Terima kasih, {st.session_state.customer_name}! Pesanan Anda sedang diproses.")
-        st.balloons()
+        # Membuat transaksi ke Midtrans
+        order_id = f"order-dibantuai-{int(time.time())}"
+        transaction_details = {
+            "order_id": order_id,
+            "gross_amount": total_price
+        }
+        customer_details = {
+            "first_name": st.session_state.customer_name,
+            "email": st.session_state.customer_email,
+            "phone": st.session_state.customer_phone
+        }
         
-        # Kosongkan keranjang dan form
-        st.session_state.cart = {}
-        st.session_state.customer_name = ""
-        st.session_state.customer_email = ""
-        st.session_state.customer_phone = ""
-        st.rerun()
+        try:
+            transaction = snap.create_transaction({
+                "transaction_details": transaction_details,
+                "item_details": item_details,
+                "customer_details": customer_details
+            })
+            st.session_state.payment_token = transaction['token']
+        except Exception as e:
+            st.error(f"Gagal membuat transaksi Midtrans: {e}")
+            st.session_state.payment_token = None
 
+# --- MENAMPILKAN POP-UP SNAP MIDTRANS ---
+if st.session_state.get('payment_token'):
+    snap_popup_html = f"""
+        <html>
+            <head>
+                <script type="text/javascript"
+                        src="https://app.sandbox.midtrans.com/snap/snap.js"
+                        data-client-key="{st.secrets.get('MIDTRANS_CLIENT_KEY', os.environ.get('MIDTRANS_CLIENT_KEY'))}"></script>
+            </head>
+            <body>
+                <script type="text/javascript">
+                    snap.pay('{st.session_state.payment_token}', {{
+                        onSuccess: function(result){{
+                            /* You may add your own implementation here */
+                            alert("payment success!"); console.log(result);
+                            window.parent.postMessage('payment-success', '*');
+                        }},
+                        onPending: function(result){{
+                            /* You may add your own implementation here */
+                            alert("wating your payment!"); console.log(result);
+                        }},
+                        onError: function(result){{
+                            /* You may add your own implementation here */
+                            alert("payment failed!"); console.log(result);
+                        }},
+                        onClose: function(){{
+                            /* You may add your own implementation here */
+                            console.log('customer closed the popup without finishing the payment');
+                            window.parent.postMessage('payment-close', '*');
+                        }}
+                    }})
+                </script>
+            </body>
+        </html>
+    """
+    st.components.v1.html(snap_popup_html, height=600)
+    # Reset token setelah ditampilkan untuk menghindari pop-up muncul terus
+    st.session_state.payment_token = None
+    # Kosongkan keranjang setelah checkout
+    st.session_state.cart = {}
+    st.session_state.customer_name = ""
+    st.session_state.customer_email = ""
+    st.session_state.customer_phone = ""
+    st.success("Silakan selesaikan pembayaran Anda.")
+    # Kita tidak rerun di sini agar pop-up tidak langsung hilang
 
 # --- FOOTER ---
 st.write("---")
