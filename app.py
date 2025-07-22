@@ -149,7 +149,6 @@ with st.sidebar:
             with st.spinner("Membuat transaksi..."):
                 transaction = snap.create_transaction({"transaction_details": transaction_details, "item_details": item_details, "customer_details": customer_details})
             st.session_state.payment_token = transaction['token']
-            # HAPUS st.rerun() DARI SINI. Biarkan script berjalan secara alami.
         except Exception as e:
             st.error(f"Gagal membuat transaksi Midtrans: {e}")
             st.session_state.payment_token = None
@@ -161,41 +160,33 @@ st.write("© 2025 dibantu.ai | Untuk informasi lebih lanjut, hubungi kami di man
 # --- TRIGGER SNAP POP-UP ---
 # Bagian ini akan dieksekusi jika ada token pembayaran
 if st.session_state.get('payment_token'):
-    # Ambil client key langsung dari secrets untuk digunakan di front-end
     client_key = st.secrets.get("MIDTRANS_CLIENT_KEY", os.environ.get("MIDTRANS_CLIENT_KEY"))
     
-    # HTML ini hanya untuk menyuntikkan script, tidak untuk ditampilkan
     snap_trigger_html = f"""
-        <html>
-            <head>
-                <script type="text/javascript"
-                        src="https://app.sandbox.midtrans.com/snap/snap.js"
-                        data-client-key="{client_key}"></script>
-            </head>
-            <body>
-                <script type="text/javascript">
-                    snap.pay('{st.session_state.payment_token}', {{
-                        onSuccess: function(result){{
-                            // Arahkan kembali ke halaman utama dengan status sukses
-                            window.parent.location.href = window.parent.location.pathname + "?payment_status=success";
-                        }},
-                        onPending: function(result){{
-                            console.log("wating your payment!"); console.log(result);
-                        }},
-                        onError: function(result){{
-                            // Arahkan kembali ke halaman utama dengan status error
-                            window.parent.location.href = window.parent.location.pathname + "?payment_status=error";
-                        }},
-                        onClose: function(){{
-                            // Arahkan kembali ke halaman utama dengan status ditutup
-                            window.parent.location.href = window.parent.location.pathname + "?payment_status=closed";
-                        }}
-                    }})
-                </script>
-            </body>
-        </html>
+        <script type="text/javascript"
+                src="https://app.sandbox.midtrans.com/snap/snap.js"
+                data-client-key="{client_key}"></script>
+        <script type="text/javascript">
+          setTimeout(function(){{
+            snap.pay('{st.session_state.payment_token}', {{
+                onSuccess: function(result){{
+                    window.parent.location.href = window.parent.location.pathname + "?payment_status=success";
+                }},
+                onPending: function(result){{
+                    console.log("wating your payment!"); console.log(result);
+                }},
+                onError: function(result){{
+                    window.parent.location.href = window.parent.location.pathname + "?payment_status=error";
+                }},
+                onClose: function(){{
+                    window.parent.location.href = window.parent.location.pathname + "?payment_status=closed";
+                }}
+            }});
+          }}, 200);
+        </script>
     """
-    # Gunakan komponen HTML untuk menjalankan script di atas
-    st.components.v1.html(snap_trigger_html, height=1)
+    # Menggunakan st.html untuk menyuntikkan skrip
+    st.html(snap_trigger_html)
+    
     # Reset token segera setelah script dijalankan untuk mencegah pop-up muncul lagi
     st.session_state.payment_token = None
