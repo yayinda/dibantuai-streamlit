@@ -54,7 +54,6 @@ def add_to_cart(product):
         st.session_state.cart[name]['quantity'] += 1
     else:
         st.session_state.cart[name] = {"name": product['name'], "price": product['price'], "quantity": 1}
-    # PERBAIKAN: Menggunakan emoji yang valid
     st.toast(f"'{name}' ditambahkan ke keranjang!", icon="🛒")
 
 def remove_from_cart(product_name):
@@ -123,31 +122,47 @@ with st.sidebar:
         
         client_key = st.secrets.get("MIDTRANS_CLIENT_KEY", os.environ.get("MIDTRANS_CLIENT_KEY"))
         
+        # PERBAIKAN: Menggunakan st.components.v1.html dengan dokumen HTML lengkap
         payment_html = f"""
-            <script type="text/javascript"
-                    src="https://app.sandbox.midtrans.com/snap/snap.js"
-                    data-client-key="{client_key}"></script>
-            <script type="text/javascript">
-                snap.pay('{st.session_state.payment_token}', {{
-                    // embedId bersifat opsional untuk menampilkan Snap di elemen tertentu
-                    embedId: 'snap-container',
-                    onSuccess: function(result){{
-                        window.parent.location.href = window.parent.location.pathname + "?payment_status=success";
-                    }},
-                    onPending: function(result){{
-                        console.log("wating your payment!"); console.log(result);
-                    }},
-                    onError: function(result){{
-                        window.parent.location.href = window.parent.location.pathname + "?payment_status=error";
-                    }},
-                    onClose: function(){{
-                        // Tidak melakukan apa-apa, biarkan pengguna klik tombol batal manual
+            <html>
+            <head>
+                <title>Pembayaran Midtrans</title>
+                <script type="text/javascript"
+                        src="https://app.sandbox.midtrans.com/snap/snap.js"
+                        data-client-key="{client_key}"></script>
+            </head>
+            <body>
+                <!-- Container ini adalah target untuk antarmuka pembayaran Midtrans -->
+                <div id="snap-container"></div>
+
+                <script type="text/javascript">
+                    // Fungsi untuk memicu pembayaran
+                    function startPayment() {{
+                        snap.pay('{st.session_state.payment_token}', {{
+                            embedId: 'snap-container',
+                            onSuccess: function(result){{
+                                window.parent.location.href = window.parent.location.pathname + "?payment_status=success";
+                            }},
+                            onPending: function(result){{
+                                console.log("Menunggu pembayaran Anda!");
+                            }},
+                            onError: function(result){{
+                                window.parent.location.href = window.parent.location.pathname + "?payment_status=error";
+                            }},
+                            onClose: function(){{
+                                // Biarkan pengguna menekan tombol "Batalkan Pembayaran" di Streamlit
+                                console.log('Pelanggan menutup antarmuka pembayaran.');
+                            }}
+                        }});
                     }}
-                }});
-            </script>
+                    
+                    // Panggil fungsi pembayaran setelah jeda singkat untuk memastikan semua elemen siap
+                    setTimeout(startPayment, 500);
+                </script>
+            </body>
+            </html>
         """
-        # Buat container untuk Snap
-        st.html(f"<div id='snap-container'></div>{payment_html}")
+        st.components.v1.html(payment_html, height=550, scrolling=False)
 
         st.write("---")
         if st.button("Batalkan Pembayaran"):
