@@ -13,10 +13,10 @@ st.set_page_config(
 
 # --- KONFIGURASI MIDTRANS ---
 # Inisialisasi klien Midtrans menggunakan st.secrets untuk keamanan
+# Client Key tidak diperlukan untuk inisialisasi server-side
 snap = midtransclient.Snap(
     is_production=False, # Ganti menjadi True jika sudah di production
-    server_key=st.secrets.get("MIDTRANS_SERVER_KEY", os.environ.get("MIDTRANS_SERVER_KEY")),
-    client_key=st.secrets.get("MIDTRANS_CLIENT_KEY", os.environ.get("MIDTRANS_CLIENT_KEY"))
+    server_key=st.secrets.get("MIDTRANS_SERVER_KEY", os.environ.get("MIDTRANS_SERVER_KEY"))
 )
 
 # --- INISIALISASI SESSION STATE ---
@@ -161,13 +161,16 @@ st.write("© 2025 dibantu.ai | Untuk informasi lebih lanjut, hubungi kami di man
 # --- TRIGGER SNAP POP-UP ---
 # Bagian ini akan dieksekusi jika ada token pembayaran
 if st.session_state.get('payment_token'):
+    # Ambil client key langsung dari secrets untuk digunakan di front-end
+    client_key = st.secrets.get("MIDTRANS_CLIENT_KEY", os.environ.get("MIDTRANS_CLIENT_KEY"))
+    
     # HTML ini hanya untuk menyuntikkan script, tidak untuk ditampilkan
     snap_trigger_html = f"""
         <html>
             <head>
                 <script type="text/javascript"
                         src="https://app.sandbox.midtrans.com/snap/snap.js"
-                        data-client-key="{snap.client_key}"></script>
+                        data-client-key="{client_key}"></script>
             </head>
             <body>
                 <script type="text/javascript">
