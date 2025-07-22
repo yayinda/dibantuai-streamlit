@@ -149,7 +149,7 @@ with st.sidebar:
             with st.spinner("Membuat transaksi..."):
                 transaction = snap.create_transaction({"transaction_details": transaction_details, "item_details": item_details, "customer_details": customer_details})
             st.session_state.payment_token = transaction['token']
-            st.rerun() # Rerun untuk memicu script pop-up di bawah
+            # HAPUS st.rerun() DARI SINI. Biarkan script berjalan secara alami.
         except Exception as e:
             st.error(f"Gagal membuat transaksi Midtrans: {e}")
             st.session_state.payment_token = None
