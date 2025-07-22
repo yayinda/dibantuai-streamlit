@@ -2,7 +2,7 @@ import streamlit as st
 
 # Mengatur konfigurasi halaman Streamlit
 st.set_page_config(
-    page_title="Katalog Produk | dibantu.ai",
+    page_title="coba beli | dibantu.ai",
     page_icon="🤖",
     layout="wide"
 )
@@ -91,7 +91,6 @@ products = [
 
 # --- TAMPILAN UTAMA (KATALOG PRODUK) ---
 st.title("dibantu.ai")
-st.subheader("Solusi Cerdas untuk Kebutuhan Digital Anda")
 st.write("---")
 
 cols_per_row = 3
