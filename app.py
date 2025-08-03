@@ -12,11 +12,121 @@ st.set_page_config(
 
 # --- KONFIGURASI MIDTRANS ---
 is_production = False
-server_key = (
-    st.secrets.get("MIDTRANS_SERVER_KEY")
-    or os.environ.get("MIDTRANS_SERVER_KEY")
-)
+server_key = st.secrets.get("MIDTRANS_SERVER_KEY") or os.environ.get("MIDTRANS_SERVER_KEY")
 environment = "api.midtrans.com" if is_production else "api.sandbox.midtrans.com"
+auth_header = base64.b64encode(f"{server_key}:".encode()).decode()
+
+# --- CEK STATUS TRANSAKSI DARI URL ---
+query_params = st.query_params
+order_id_from_url = query_params.get("order_id")
+
+if order_id_from_url:
+    st.info(f"🔄 Mengecek status pembayaran untuk Order ID `{order_id_from_url}`...")
+    try:
+        resp = requests.get(
+            f"https://{environment}/v2/{order_id_from_url}/status",
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Basic {auth_header}"
+            },
+            timeout=10
+        )
+        data = resp.json()
+        if resp.status_code == 200:
+            status = data.get("transaction_status", "UNKNOWN").upper()
+            st.success(f"✅ Status Pembayaran: **{status}**")
+        else:
+            st.warning(f"⚠️ Gagal ambil status pembayaran. Status code: {resp.status_code}")
+    except Exception as e:
+        st.error(f"❌ Terjadi kesalahan saat cek status pembayaran: {e}")
+    st.write("---")
+
+# --- SESSION STATE ---
+if 'cart' not in st.session_state:
+    st.session_state.cart = {}
+
+if 'customer_name' not in st.session_state:
+    st.session_state.customer_name = ""
+    st.session_state.customer_email = ""
+    st.session_state.customer_phone = ""
+
+st.title("🛒 Keranjang Belanja")
+
+col1, col2 = st.columns([3, 2])
+
+with col1:
+    st.subheader("Isi Keranjang")
+    if not st.session_state.cart:
+        st.info("Keranjang kosong. Tambahkan item terlebih dahulu.")
+    else:
+        total = 0
+        item_details = []
+        for item, qty in st.session_state.cart.items():
+            price = 10000
+            subtotal = price * qty
+            total += subtotal
+            st.write(f"- {item} x {qty} = Rp{subtotal:,}")
+            item_details.append({
+                "id": item.lower(),
+                "price": price,
+                "quantity": qty,
+                "name": item
+            })
+        st.write(f"**Total: Rp{total:,}**")
+
+with col2:
+    st.subheader("Informasi Pembeli")
+    st.session_state.customer_name = st.text_input("Nama", st.session_state.customer_name)
+    st.session_state.customer_email = st.text_input("Email", st.session_state.customer_email)
+    st.session_state.customer_phone = st.text_input("Nomor HP", st.session_state.customer_phone)
+
+if st.button("Checkout Sekarang", use_container_width=True, type="primary"):
+    if not st.session_state.cart:
+        st.warning("Keranjang kosong.")
+    elif not all([
+        st.session_state.customer_name,
+        st.session_state.customer_email,
+        st.session_state.customer_phone
+    ]):
+        st.warning("Lengkapi informasi pembeli terlebih dahulu.")
+    else:
+        order_id = f"order-{uuid.uuid4().hex[:10]}"
+        payload = {
+            "transaction_details": {
+                "order_id": order_id,
+                "gross_amount": total
+            },
+            "customer_details": {
+                "first_name": st.session_state.customer_name,
+                "email": st.session_state.customer_email,
+                "phone": st.session_state.customer_phone
+            },
+            "item_details": item_details,
+            "callbacks": {
+                "finish": f"https://dibantuai-cobamidtrans.streamlit.app/?order_id={order_id}"
+            }
+        }
+
+        try:
+            response = requests.post(
+                f"https://{environment}/v1/payment-links",
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Authorization": f"Basic {auth_header}"
+                },
+                json=payload,
+                timeout=10
+            )
+            result = response.json()
+            if response.status_code == 201:
+                st.success("Link pembayaran berhasil dibuat!")
+                st.markdown(f"[Klik di sini untuk bayar]({result['payment_url']})")
+                st.session_state.cart = {}
+            else:
+                st.error(f"Gagal membuat payment link: {result}")
+        except Exception as e:
+            st.error(f"Terjadi kesalahan saat membuat payment link: {e}")
 
 # --- SESSION STATE ---
 if 'cart' not in st.session_state:
@@ -215,3 +325,4 @@ if st.session_state.payment_link_url:
 # --- FOOTER ---
 st.write("---")
 st.write("© 2025 dibantu.ai | Untuk informasi lebih lanjut, hubungi kami di mana ya.")
+
