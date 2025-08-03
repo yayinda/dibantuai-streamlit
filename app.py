@@ -64,37 +64,37 @@ products = [
         "name": "Chatbot AI",
         "image": "https://placehold.co/600x300/E0E7FF/4F46E5?text=Chatbot+AI",
         "description": "Menggunakan Pemahaman Bahasa Alami (NLP) dan dapat terintegrasi dengan berbagai sistem seperti CRM, ERP, dan Helpdesk dengan dukungan multi-channel.",
-        "price": 600000
+        "price": 6000
     },
     {
         "name": "Sistem Pengajaran AI",
         "image": "https://placehold.co/600x300/D1FAE5/065F46?text=Sistem+Pengajaran+AI",
         "description": "Personalisasi pembelajaran yang berbasis AI dan dapat beradaptasi dengan kebutuhan individu.",
-        "price": 650000
+        "price": 6500
     },
     {
         "name": "Kiosk Interaktif",
         "image": "https://placehold.co/600x300/FEF2F2/991B1B?text=Kiosk+Interaktif",
         "description": "Solusi untuk layanan mandiri dengan layar sentuh responsif yang dapat digunakan di berbagai lokasi.",
-        "price": 850000
+        "price": 8500
     },
     {
         "name": "Agen Virtual",
         "image": "https://placehold.co/600x300/FFFBEB/B45309?text=Agen+Virtual",
         "description": "Dapat berinteraksi secara alami dengan pelanggan melalui berbagai platform digital.",
-        "price": 550000
+        "price": 5500
     },
     {
         "name": "Analisis Prediktif",
         "image": "https://placehold.co/600x300/EFF6FF/1E40AF?text=Analisis+Prediktif",
         "description": "Menggunakan machine learning dan data historis untuk memprediksi tren dan mendukung pengambilan keputusan strategis.",
-        "price": 650000
+        "price": 6500
     },
     {
         "name": "Pengenalan Objek",
         "image": "https://placehold.co/600x300/F3F4F6/1F2937?text=Pengenalan+Objek",
         "description": "Solusi vision intelligence yang mampu mengenali, mengklasifikasi, dan melacak objek secara otomatis.",
-        "price": 950000
+        "price": 9500
     }
 ]
 
@@ -242,3 +242,4 @@ if st.session_state.get('payment_token'):
 # --- FOOTER ---
 st.write("---")
 st.write("© 2025 dibantu.ai | Untuk informasi lebih lanjut, hubungi kami di mana ya.")
+
